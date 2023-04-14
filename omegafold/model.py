@@ -163,7 +163,7 @@ class OmegaFold(modules.OFModule):
         for cycle_data in inputs:
             p_msa, p_msa_mask = cycle_data['p_msa'], cycle_data['p_msa_mask']
             fasta, mask = p_msa[..., 0, :], p_msa_mask[..., 0, :]
-            node_repr, edge_repr = self.deep_sequence_embed(
+            plm_node_repr, plm_edge_repr = self.deep_sequence_embed(
                 p_msa,
                 p_msa_mask,
                 fwd_cfg
@@ -173,8 +173,8 @@ class OmegaFold(modules.OFModule):
                 prev_node=prev_dict.pop('prev_node'),
                 prev_edge=prev_dict.pop('prev_edge'),
                 prev_x=prev_dict.pop('prev_x'),
-                node_repr=node_repr,
-                edge_repr=edge_repr,
+                node_repr=plm_node_repr,
+                edge_repr=plm_edge_repr,
                 atom14_mask=residx_atom14_mask,
                 prev_frames=prev_dict.pop('prev_frames')
             )
@@ -182,7 +182,7 @@ class OmegaFold(modules.OFModule):
             result, prev_dict = self.omega_fold_cycle(
                 fasta=fasta,
                 mask=p_msa_mask,
-                node_repr=node_repr,
+                node_repr=plm_node_repr,
                 edge_repr=edge_repr,
                 fwd_cfg=fwd_cfg
             )
@@ -197,8 +197,12 @@ class OmegaFold(modules.OFModule):
                 if confidence_overall > max_confidence:
                     max_confidence = confidence_overall
                     final_result = result
+                    final_result["final_plm_node_representations"] = plm_node_repr
+                    final_result["final_plm_edge_representations"] = plm_edge_repr
             else:
                 final_result = result
+                final_result["final_plm_node_representations"] = plm_node_repr
+                final_result["final_plm_edge_representations"] = plm_edge_repr
 
         return final_result
 

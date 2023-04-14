@@ -180,6 +180,55 @@ def fasta2inputs(
         yield utils.recursive_to(data, device=device), out_fname
 
 
+def sequence2input(
+        sequence: str,
+        num_pseudo_msa: int = 15,
+        device: typing.Optional[torch.device] = torch.device('cpu'),
+        mask_rate: float = 0.12,
+        num_cycle: int = 10,
+        deterministic: bool = True
+) -> typing.List[typing.Dict[str, torch.Tensor]]:
+    """
+    Convert an input sequence to model inputs
+
+    Args:
+        sequence: the input protein sequence
+        num_pseudo_msa:
+        device: the device to move
+        mask_rate:
+        num_cycle:
+        deterministic:
+
+    Returns:
+
+    """
+    aastr = sequence.strip("\n").upper().replace("Z", "E").replace("B", "D").replace("U", "C")
+    aatype = torch.LongTensor(
+        [rc.restypes_with_x.index(aa) if aa != '-' else 21 for aa in aastr]
+    )
+    mask = torch.ones_like(aatype).float()
+    assert torch.all(aatype.ge(0)) and torch.all(aatype.le(21)), \
+        f"Only take 0-20 amino acids as inputs with unknown amino acid " \
+        f"indexed as 20"
+    num_res = len(aatype)
+    data = list()
+    g = None
+    if deterministic:
+        g = torch.Generator()
+        g.manual_seed(num_res)
+    for _ in range(num_cycle):
+        p_msa = aatype[None, :].repeat(num_pseudo_msa, 1)
+        p_msa_mask = torch.rand(
+            [num_pseudo_msa, num_res], generator=g
+        ).gt(mask_rate)
+        p_msa_mask = torch.cat((mask[None, :], p_msa_mask), dim=0)
+        p_msa = torch.cat((aatype[None, :], p_msa), dim=0)
+        p_msa[~p_msa_mask.bool()] = 21
+        data.append({"p_msa": p_msa, "p_msa_mask": p_msa_mask})
+
+    return utils.recursive_to(data, device=device)
+
+
 def save_pdb(
         pos14: torch.Tensor,
         b_factors: torch.Tensor,
@@ -301,7 +350,7 @@ def _get_device(device) -> str:
         raise ValueError(f"Device type {device} is not available")
 
 
-def get_args() -> typing.Tuple[
+def get_args(generate_pdb_file_outputs: bool = True) -> typing.Tuple[
     argparse.Namespace, collections.OrderedDict, argparse.Namespace]:
     """
     Parse the arguments, which includes loading the weights
@@ -323,23 +372,24 @@ def get_args() -> typing.Tuple[
         by issuing the general command with only model number chosen (1-3).
         """
     )
-    parser.add_argument(
-        'input_file', type=lambda x: os.path.expanduser(str(x)),
-        help=
-        """
-        The input fasta file
-        """
-    )
-    parser.add_argument(
-        'output_dir', type=lambda x: os.path.expanduser(str(x)),
-        help=
-        """
-        The output directory to write the output pdb files. 
-        If the directory does not exist, we just create it. 
-        The output file name follows its unique identifier in the 
-        rows of the input fasta file"
-        """
-    )
+    if generate_pdb_file_outputs:
+        parser.add_argument(
+            'input_file', type=lambda x: os.path.expanduser(str(x)),
+            help=
+            """
+            The input fasta file
+            """
+        )
+        parser.add_argument(
+            'output_dir', type=lambda x: os.path.expanduser(str(x)),
+            help=
+            """
+            The output directory to write the output pdb files. 
+            If the directory does not exist, we just create it. 
+            The output file name follows its unique identifier in the 
+            rows of the input fasta file"
+            """
+        )
     parser.add_argument(
         '--num_cycle', default=10, type=int,
         help="The number of cycles for optimization, default to 10"

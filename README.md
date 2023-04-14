@@ -47,13 +47,13 @@ To prepare the environment to run OmegaFold,
 - from source
 
 ```commandline
-pip install git+https://github.com/HeliXonProtein/OmegaFold.git
+pip install git+https://github.com/amorehead/OmegaFold-Embeddings.git
 ```
 
 - clone the repository
 
 ```commandline
-git clone https://github.com/HeliXonProtein/OmegaFold
+git clone https://github.com/amorehead/OmegaFold-Embeddings.git
 cd OmegaFold
 python setup.py install
 ```
@@ -69,7 +69,7 @@ from https://helixon.s3.amazonaws.com/release1.pt
 to `~/.cache/omegafold_ckpt/model.pt`
 and load the model
 
-## Running
+## Running (for structure prediction)
 
 You could simply
 
@@ -79,7 +79,57 @@ omegafold INPUT_FILE.fasta OUTPUT_DIRECTORY
 
 And voila!
 
-### Alternatively (Or MacOS users)
+## Running (for embedding generation)
+
+You could simply
+
+```python
+import torch
+import omegafold as of
+from omegafold import pipeline
+
+# Specify input sequence as a string
+input_sequence = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"
+
+# Process model arguments
+args, state_dict, forward_config = pipeline.get_args(generate_pdb_file_outputs=False)
+assert state_dict is not None, "Must perform model inference using pretrained weights."
+
+# Specify computation device
+args.device = "cuda"
+
+# Load OmegaFold model
+model = of.OmegaFold(of.make_config(args.model))
+if "model" in state_dict:
+	state_dict = state_dict.pop("model")
+model.load_state_dict(state_dict)
+model.eval()  # disable dropout for deterministic results
+model.to(args.device)
+
+# Generate model inputs from input sequence
+input_data = pipeline.sequence2input(
+	input_sequence,
+	num_pseudo_msa=args.num_pseudo_msa,
+	device=args.device,
+	mask_rate=args.pseudo_msa_mask_rate,
+	num_cycle=args.num_cycle,
+	deterministic=True
+)
+
+# Run model inference
+with torch.no_grad():
+	model_outputs = model(
+		input_data,
+		predict_with_confidence=True,
+		fwd_cfg=forward_config
+	)
+
+# Extract desired e.g., sequence embeddings
+sequence_representations = model_outputs["final_plm_node_representations"]
+sequence_representations = sequence_representations.view(len(input_sequence), -1)  # unravel `heads` dimension
+```
+
+### Alternatively (For MacOS users - for structure prediction)
 
 Even if this failed, since we use minimal 3rd party libraries, you can
 always just install the latest
@@ -87,7 +137,7 @@ always just install the latest
 (and that's it!) yourself.
 For mps accelerator, macOS users may need to install the lastest nightly
 version of PyTorch.
-In this case, you could run
+In this case, for structure prediction you could run
 
 ```commandline
 python main.py INPUT_FILE.fasta OUTPUT_DIRECTORY
