@@ -350,7 +350,7 @@ def _get_device(device) -> str:
         raise ValueError(f"Device type {device} is not available")
 
 
-def get_args(generate_pdb_file_outputs: bool = True) -> typing.Tuple[
+def get_args(usage: str = None, generate_pdb_file_outputs: bool = True) -> typing.Tuple[
     argparse.Namespace, collections.OrderedDict, argparse.Namespace]:
     """
     Parse the arguments, which includes loading the weights
@@ -370,7 +370,8 @@ def get_args(generate_pdb_file_outputs: bool = True) -> typing.Tuple[
         Examples folder, where each folder contains the output of each 
         available model from model1 to model3. All of the results are obtained 
         by issuing the general command with only model number chosen (1-3).
-        """
+        """,
+        usage=usage
     )
     if generate_pdb_file_outputs:
         parser.add_argument(
