@@ -226,9 +226,6 @@ class MultiHeadedScaling(OFModule):
             self,
             shape: typing.Union[int, typing.List[int], torch.Size],
             num_heads: int,
-            on_out_ready: typing.Optional[
-                typing.Callable[[torch.Tensor], torch.Tensor]
-            ],
             dtype: typing.Optional[torch.dtype] = None,
     ) -> None:
         """
@@ -237,7 +234,6 @@ class MultiHeadedScaling(OFModule):
             shape: the shape of the input dimensions
             num_heads: the number of dimensions to squeeze to
             dtype: the dtype of the parameters at generation
-            on_out_ready: the function called on exit
         """
         super(MultiHeadedScaling, self).__init__(None)
         factory_kwargs = nn.factory_kwargs({"dtype": dtype})
@@ -250,17 +246,21 @@ class MultiHeadedScaling(OFModule):
         self.split_dims = [1] * num_heads
         self.weight = nn.Parameter(torch.empty(self.shape, **factory_kwargs))
         self.bias = nn.Parameter(torch.empty(self.shape, **factory_kwargs))
-        self.call_on_out_ready = on_out_ready
 
         self.reset_parameters()
 
-    def forward(self, x: torch.Tensor) -> typing.List[torch.Tensor]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        on_out_ready: typing.Optional[typing.Callable[[torch.Tensor], torch.Tensor]]
+    ) -> typing.List[torch.Tensor]:
         """
         Element wise multiplication followed by addition
 
         Args:
             x: the input tensor with the trailing dimensions following
                 ~self.shape
+            on_out_ready: the function called on exit
 
         Returns:
             A output tensor of the same shape
@@ -268,8 +268,8 @@ class MultiHeadedScaling(OFModule):
         """
         x = x.unsqueeze(self.unsqueeze_dim) * self.weight + self.bias
         positive_index = x.ndim + self.unsqueeze_dim
-        if self.call_on_out_ready is not None:
-            x = self.call_on_out_ready(x)
+        if on_out_ready is not None:
+            x = on_out_ready(x)
 
         x = x.split(self.split_dims, dim=positive_index)
 
